@@ -4,6 +4,16 @@
 
 #import "Display.h"
 
+@interface MonitorPanel : NSPanel
+@end
+@implementation MonitorPanel
+- (NSString *)accessibilityHelp {
+    BOOL visible = self.onActiveSpace && (self.occlusionState & NSWindowOcclusionStateVisible);
+    return visible ? @"The preview is visible on the current desktop."
+                   : @"The preview is outside the visible desktop.";
+}
+@end
+
 @interface PreviewView : NSView
 @property (strong) AVSampleBufferDisplayLayer *video;
 @property BOOL live;
@@ -43,11 +53,16 @@
     NSRect usable = (builtin ?: NSScreen.mainScreen).visibleFrame;
     CGFloat width = MIN(480, usable.size.width * 0.4);
     NSRect frame = NSMakeRect(NSMaxX(usable)-width-16, NSMinY(usable)+16, width, width*9/16);
-    self.panel = [[NSPanel alloc] initWithContentRect:frame styleMask:NSWindowStyleMaskTitled|NSWindowStyleMaskClosable|NSWindowStyleMaskResizable|NSWindowStyleMaskNonactivatingPanel backing:NSBackingStoreBuffered defer:NO];
+    self.panel = [[MonitorPanel alloc] initWithContentRect:frame styleMask:NSWindowStyleMaskTitled|NSWindowStyleMaskClosable|NSWindowStyleMaskResizable|NSWindowStyleMaskNonactivatingPanel backing:NSBackingStoreBuffered defer:NO];
     self.panel.title = @"Codex Workspace";
+    self.panel.floatingPanel = YES;
+    self.panel.becomesKeyOnlyIfNeeded = YES;
+    self.panel.canHide = NO;
     self.panel.level = NSFloatingWindowLevel;
     self.panel.hidesOnDeactivate = NO;
-    self.panel.collectionBehavior = NSWindowCollectionBehaviorCanJoinAllSpaces|NSWindowCollectionBehaviorFullScreenAuxiliary;
+    self.panel.collectionBehavior = NSWindowCollectionBehaviorCanJoinAllSpaces |
+                                    NSWindowCollectionBehaviorFullScreenAuxiliary |
+                                    NSWindowCollectionBehaviorCanJoinAllApplications;
     self.panel.contentAspectRatio = NSMakeSize(16,9);
     self.panel.contentMinSize = NSMakeSize(320,180);
     self.preview = [PreviewView new];
@@ -69,6 +84,11 @@
         [self.choose.centerXAnchor constraintEqualToAnchor:self.preview.centerXAnchor],
         [self.choose.topAnchor constraintEqualToAnchor:self.message.bottomAnchor constant:12]]];
     self.preview.toolTip = @"Click a point to move your pointer there. Then click or type in the workspace. Move right to return.";
+    NSNotificationCenter *workspaceEvents = NSWorkspace.sharedWorkspace.notificationCenter;
+    [workspaceEvents addObserver:self selector:@selector(restoreMonitorOrder:)
+                            name:NSWorkspaceDidActivateApplicationNotification object:nil];
+    [workspaceEvents addObserver:self selector:@selector(restoreMonitorOrder:)
+                            name:NSWorkspaceActiveSpaceDidChangeNotification object:nil];
     [self.panel orderFrontRegardless];
     [self status:@"Watch the virtual display in this window."];
     if (displayError) [self status:displayError];
@@ -77,6 +97,10 @@
 - (BOOL)applicationShouldHandleReopen:(NSApplication *)sender hasVisibleWindows:(BOOL)visible {
     [self.panel orderFrontRegardless];
     return YES;
+}
+- (void)restoreMonitorOrder:(NSNotification *)notification {
+    // Reorder the panel without making the viewer the active app.
+    if (self.panel.visible && !self.panel.miniaturized) [self.panel orderFrontRegardless];
 }
 - (void)status:(NSString *)message {
     self.preview.live = NO; self.message.hidden = NO; self.choose.hidden = NO;
@@ -92,7 +116,7 @@
             self.choose.enabled = YES;
             if (error) {
                 NSString *reason = error.code == SCStreamErrorUserDeclined ?
-                    @"Screen access is off. Allow Agent Virtual Display Mac in System Settings → Privacy & Security → Screen & System Audio Recording, then reopen it." :
+                    @"macOS declined the capture request. If this viewer already has screen access, quit and reopen it. First-time setup is in Privacy & Security → Screen & System Audio Recording." :
                     error.localizedDescription;
                 [self status:reason]; return;
             }
