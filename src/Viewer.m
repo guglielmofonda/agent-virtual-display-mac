@@ -92,7 +92,7 @@
             self.choose.enabled = YES;
             if (error) {
                 NSString *reason = error.code == SCStreamErrorUserDeclined ?
-                    @"Screen access is off. Allow Mac Agent Display in System Settings → Privacy & Security → Screen & System Audio Recording, then reopen it." :
+                    @"Screen access is off. Allow Agent Virtual Display Mac in System Settings → Privacy & Security → Screen & System Audio Recording, then reopen it." :
                     error.localizedDescription;
                 [self status:reason]; return;
             }

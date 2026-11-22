@@ -1,5 +1,5 @@
-APP := build/MacAgentDisplay.app
-BIN := $(APP)/Contents/MacOS/MacAgentDisplay
+APP := build/AgentVirtualDisplayMac.app
+BIN := $(APP)/Contents/MacOS/AgentVirtualDisplayMac
 .PHONY: build
 build: $(APP)/Contents/_CodeSignature/CodeResources
 

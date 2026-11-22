@@ -4,7 +4,7 @@
     "role": "ROLE_USER",
     "parts": [
       {
-        "text": "Set up https://github.com/guglielmofonda/mac-agent-display on my Mac. Read AGENTS.md, open the live viewer, and move a dedicated browser window onto Codex Workspace. Keep my working window available. Verify the live preview and tell me which window you moved."
+        "text": "Set up https://github.com/guglielmofonda/agent-virtual-display-mac on my Mac. Read AGENTS.md, open the live viewer, and move a dedicated browser window onto Codex Workspace. Keep my working window available. Verify the live preview and tell me which window you moved."
       }
     ]
   }
