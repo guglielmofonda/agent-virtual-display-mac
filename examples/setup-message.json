@@ -1,0 +1,11 @@
+{
+  "message": {
+    "messageId": "3bcbb28f-d728-4396-ac7a-688e0ff44646",
+    "role": "ROLE_USER",
+    "parts": [
+      {
+        "text": "Set up https://github.com/guglielmofonda/mac-agent-display on my Mac. Read AGENTS.md, open the live viewer, and move a dedicated browser window onto Codex Workspace. Keep my working window available. Verify the live preview and tell me which window you moved."
+      }
+    ]
+  }
+}
