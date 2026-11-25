@@ -11,6 +11,20 @@
 
 Run `xcode-select --install` if the compiler tools are missing. Start the app with `./Start.command` from the repository, or double-click that file in Finder. The app bundle is `build/VirtualDesktop.app`; its macOS name is **Virtual Desktop**.
 
+## First launch
+
+Agent Display opens a three-step guide before starting a new workspace:
+
+1. **Welcome:** introduces the virtual screen, floating preview, and menu bar. Both displays share the Mac’s pointer and keyboard.
+2. **Permissions:** choose **Allow Preview**, then enable **Virtual Desktop** under **Privacy & Security → Screen & System Audio Recording**. The app checks permission status while setup is open. **Allow Movement** opens Accessibility settings; this permission is optional.
+3. **Workspace:** choose **Start Preview**. Once the preview is live, optionally select an open app to move its windows, then choose **Finish Setup**.
+
+macOS can require quitting and reopening after enabling screen access. Accept its prompt and open the same installation if it does not reopen automatically. Setup resumes at the saved step. If a switch already looks enabled but setup still reports no access, quit and reopen before trying again.
+
+Closing the guide or choosing **Set Up Later** leaves the app in the menu bar. Unfinished setup resumes on the next launch. Use **Setup & Permissions…** to return sooner. If you already started a display, deferring setup leaves it connected; use **Stop Virtual Desktop** to disconnect it.
+
+Setup only marks itself complete after you choose **Finish Setup** with a live preview. It does not request permissions automatically, reset privacy grants, or move an app until you select one. Existing installations are recognized and retain their usual startup behavior.
+
 ## Keep permissions across updates
 
 The default local build uses ad-hoc signing. Its identity changes with the binary, which can invalidate Screen Recording and Accessibility grants even when System Settings still shows the switches enabled.
@@ -76,6 +90,8 @@ Then **Hide Preview** and **Show Preview** to restart capture at the new resolut
 ### The preview is blank or says macOS declined capture
 
 Confirm that **Virtual Desktop** is enabled in **System Settings → Privacy & Security → Screen & System Audio Recording**. Quit and reopen the app after changing permission, then choose **Start preview** if needed.
+
+The preview’s **Setup & Permissions…** button opens the same guide with direct links to the relevant settings. A capture failure keeps setup unfinished and allows another attempt. If no frame arrives within 20 seconds, setup explains how to retry or recheck access.
 
 If you recently changed signing identities and the enabled switch no longer works, reset this app’s screen-capture grant from your own Terminal:
 

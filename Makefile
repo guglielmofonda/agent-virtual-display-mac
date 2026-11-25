@@ -2,11 +2,23 @@ APP := build/VirtualDesktop.app
 BIN := $(APP)/Contents/MacOS/VirtualDesktop
 -include Signing.local.mk
 CODE_SIGN_IDENTITY ?= -
-.PHONY: build sign test
+.PHONY: build sign test test-ui
 build: $(APP)/Contents/_CodeSignature/CodeResources
 
-test: build/WindowMoverTests
+test: build/WindowMoverTests build/SetupStateTests
 	./build/WindowMoverTests
+	./build/SetupStateTests
+
+build/SetupStateTests: tests/SetupStateTests.m src/SetupState.m src/SetupState.h Makefile
+	mkdir -p build
+	xcrun clang -fobjc-arc -fno-modules -mmacosx-version-min=15.2 -Wall -Wextra tests/SetupStateTests.m src/SetupState.m -framework Foundation -o "$@"
+
+test-ui: build/SetupUITests
+	./build/SetupUITests
+
+build/SetupUITests: tests/SetupUITests.m src/SetupState.m src/SetupState.h src/SetupWindowController.m src/SetupWindowController.h Makefile
+	mkdir -p build
+	xcrun clang -fobjc-arc -fno-modules -mmacosx-version-min=15.2 -Wall -Wextra -Wno-unused-parameter tests/SetupUITests.m src/SetupState.m src/SetupWindowController.m -framework Cocoa -framework ApplicationServices -framework CoreGraphics -framework QuartzCore -o "$@"
 
 build/WindowMoverTests: tests/WindowMoverTests.m src/WindowMover.m src/WindowMover.h src/Display.m src/Display.h Makefile
 	mkdir -p build
@@ -17,9 +29,9 @@ sign $(APP)/Contents/_CodeSignature/CodeResources: $(BIN) $(APP)/Contents/Info.p
 	codesign --force --sign "$(CODE_SIGN_IDENTITY)" "$(APP)"
 	codesign --verify --strict "$(APP)"
 
-$(BIN): src/Viewer.m src/Display.m src/Display.h src/WindowMover.m src/WindowMover.h Makefile
+$(BIN): src/Viewer.m src/Display.m src/Display.h src/WindowMover.m src/WindowMover.h src/SetupState.m src/SetupState.h src/SetupWindowController.m src/SetupWindowController.h Makefile
 	mkdir -p "$(dir $@)"
-	xcrun clang -fobjc-arc -fno-modules -mmacosx-version-min=15.2 -Wall -Wextra -Wno-unused-parameter src/Viewer.m src/Display.m src/WindowMover.m -framework Cocoa -framework ApplicationServices -framework CoreGraphics -framework ScreenCaptureKit -framework AVFoundation -framework CoreMedia -framework QuartzCore -o "$@"
+	xcrun clang -fobjc-arc -fno-modules -mmacosx-version-min=15.2 -Wall -Wextra -Wno-unused-parameter src/Viewer.m src/Display.m src/WindowMover.m src/SetupState.m src/SetupWindowController.m -framework Cocoa -framework ApplicationServices -framework CoreGraphics -framework ScreenCaptureKit -framework AVFoundation -framework CoreMedia -framework QuartzCore -o "$@"
 
 $(APP)/Contents/Info.plist: Info.plist
 	mkdir -p "$(dir $@)"

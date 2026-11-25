@@ -4,6 +4,7 @@
 
 #import "Display.h"
 #import "WindowMover.h"
+#import "SetupWindowController.h"
 
 @interface MonitorPanel : NSPanel
 @end
@@ -44,12 +45,15 @@
 }
 @end
 
-@interface Viewer : NSObject <NSApplicationDelegate, NSWindowDelegate, NSMenuDelegate, SCStreamDelegate, SCStreamOutput>
+@interface Viewer : NSObject <NSApplicationDelegate, NSWindowDelegate, NSMenuDelegate, SCStreamDelegate, SCStreamOutput, ADSetupDelegate>
 @property (strong) id displayOwner;
 @property (strong) NSPanel *panel;
 @property (strong) PreviewView *preview;
 @property (strong) NSTextField *message;
 @property (strong) NSButton *choose;
+@property (strong) NSButton *setupHelp;
+@property (strong) ADSetupState *setupState;
+@property (strong) ADSetupWindowController *setup;
 @property (strong) SCStream *stream;
 @property (strong) NSStatusItem *statusItem;
 @property BOOL transitioning;
@@ -60,6 +64,7 @@
 @end
 @implementation Viewer
 - (void)applicationDidFinishLaunching:(NSNotification *)note {
+    self.setupState = [[ADSetupState alloc] initWithDefaults:NSUserDefaults.standardUserDefaults];
     [self installMenu];
     NSRect usable = (MainPhysicalScreen() ?: NSScreen.mainScreen).visibleFrame;
     CGFloat width = MIN(480, usable.size.width * 0.4);
@@ -99,13 +104,16 @@
     self.message.alignment = NSTextAlignmentCenter;
     self.message.textColor = NSColor.whiteColor;
     self.choose = [NSButton buttonWithTitle:@"Start preview" target:self action:@selector(connect:)];
-    for (NSView *v in @[self.message,self.choose]) { v.translatesAutoresizingMaskIntoConstraints = NO; [self.preview addSubview:v]; }
+    self.setupHelp = [NSButton buttonWithTitle:@"Setup & Permissions…" target:self action:@selector(openSetupPermissions:)];
+    for (NSView *v in @[self.message,self.choose,self.setupHelp]) { v.translatesAutoresizingMaskIntoConstraints = NO; [self.preview addSubview:v]; }
     [NSLayoutConstraint activateConstraints:@[
         [self.message.centerXAnchor constraintEqualToAnchor:self.preview.centerXAnchor],
-        [self.message.centerYAnchor constraintEqualToAnchor:self.preview.centerYAnchor constant:-17],
+        [self.message.centerYAnchor constraintEqualToAnchor:self.preview.centerYAnchor constant:-30],
         [self.message.widthAnchor constraintLessThanOrEqualToAnchor:self.preview.widthAnchor constant:-24],
         [self.choose.centerXAnchor constraintEqualToAnchor:self.preview.centerXAnchor],
-        [self.choose.topAnchor constraintEqualToAnchor:self.message.bottomAnchor constant:12]]];
+        [self.choose.topAnchor constraintEqualToAnchor:self.message.bottomAnchor constant:12],
+        [self.setupHelp.centerXAnchor constraintEqualToAnchor:self.preview.centerXAnchor],
+        [self.setupHelp.topAnchor constraintEqualToAnchor:self.choose.bottomAnchor constant:8]]];
     self.preview.toolTip = @"Click a point to move your pointer there. Then click or type in the workspace. Move right to return.";
     NSNotificationCenter *workspaceEvents = NSWorkspace.sharedWorkspace.notificationCenter;
     [workspaceEvents addObserver:self selector:@selector(restoreMonitorOrder:)
@@ -114,12 +122,17 @@
                             name:NSWorkspaceActiveSpaceDidChangeNotification object:nil];
     [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(displaysChanged:)
                                                name:NSApplicationDidChangeScreenParametersNotification object:nil];
-    if (![NSUserDefaults.standardUserDefaults boolForKey:@"WorkspaceStopped"] || WorkspaceDisplayID()) {
+    self.setup = [[ADSetupWindowController alloc] initWithState:self.setupState delegate:self];
+    if (!self.setupState.completed || [NSProcessInfo.processInfo.arguments containsObject:@"--show-setup"]) {
+        [self status:@"Finish setup to start your Agent Display preview."];
+        [self.setup showSetup];
+    } else if (![NSUserDefaults.standardUserDefaults boolForKey:@"WorkspaceStopped"] || WorkspaceDisplayID()) {
         [self startDesktop:nil];
         [self showPreview:nil];
     } else [self status:@"Virtual desktop is stopped."];
 }
 - (BOOL)applicationShouldHandleReopen:(NSApplication *)sender hasVisibleWindows:(BOOL)visible {
+    if (!self.setupState.completed) { [self.setup showSetup]; return YES; }
     if (!WorkspaceDisplayID()) [self startDesktop:nil];
     [self showPreview:nil];
     return YES;
@@ -206,6 +219,7 @@
     if (running && !self.displayOwner && !self.transitioning)
         [self addItem:@"Display is managed by another instance" action:NULL toMenu:menu enabled:NO];
     [menu addItem:NSMenuItem.separatorItem];
+    [self addItem:@"Setup & Permissions…" action:@selector(openSetup:) toMenu:menu enabled:YES];
     [self addItem:@"Quit Virtual Desktop" action:@selector(quit:) toMenu:menu enabled:!self.transitioning];
     menu.itemArray.lastObject.keyEquivalent = @"q";
 }
@@ -295,6 +309,7 @@
     self.captureGeneration++;
     self.connecting = NO;
     self.preview.live = NO;
+    [self.setup updatePreviewLive:NO message:@"Preview paused. Start it again when you’re ready."];
     SCStream *stream = self.stream;
     self.stream = nil;
     [self.preview.video.sampleBufferRenderer flushWithRemovalOfDisplayedImage:YES completionHandler:nil];
@@ -321,17 +336,20 @@
     [self updateMenu];
 }
 - (void)openAccessibility:(id)sender {
-    NSAlert *alert = [NSAlert new];
-    alert.messageText = @"Allow moving app windows";
-    alert.informativeText = @"Enable Virtual Desktop in System Settings → Privacy & Security → Accessibility. macOS grants this app permission to control other apps’ windows. Then choose the app again from the menu bar.";
-    [alert addButtonWithTitle:@"Open System Settings"];
-    [alert addButtonWithTitle:@"Cancel"];
-    [NSApp activateIgnoringOtherApps:YES];
-    if ([alert runModal] == NSAlertFirstButtonReturn) {
-        AXIsProcessTrustedWithOptions((__bridge CFDictionaryRef)@{(__bridge NSString *)kAXTrustedCheckOptionPrompt: @YES});
-        [NSWorkspace.sharedWorkspace openURL:[NSURL URLWithString:@"x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"]];
-    }
+    [self openSetupPermissions:sender];
 }
+- (void)openSetup:(id)sender { [self.setup showSetup]; }
+- (void)openSetupPermissions:(id)sender { [self.setup showPermissions]; }
+- (void)setupStartPreview {
+    if (!WorkspaceDisplayID()) [self startDesktop:nil];
+    else if (!self.preview.live && (self.stream || self.connecting)) {
+        [self stopCaptureWithCompletion:^{ [self showPreview:nil]; }];
+    } else [self showPreview:nil];
+}
+- (NSString *)setupMoveApplication:(NSRunningApplication *)application {
+    return MoveApplicationToWorkspace(application);
+}
+- (void)setupDidFinish { [self showPreview:nil]; }
 - (void)moveApplication:(NSMenuItem *)item {
     if (!WindowMovementAllowed()) { [self openAccessibility:nil]; return; }
     BOOL toWorkspace = item.tag != 0;
@@ -357,12 +375,14 @@
 }
 - (void)status:(NSString *)message {
     self.preview.live = NO; self.message.hidden = NO;
+    self.setupHelp.hidden = NO;
     self.choose.hidden = NO;
     self.choose.title = WorkspaceDisplayID() ? @"Start preview" : @"Start desktop";
     self.choose.enabled = !self.connecting && !self.transitioning;
     self.panel.title = @"Agent Display";
     self.panel.subtitle = @"";
     self.message.stringValue = message;
+    [self.setup updatePreviewLive:NO message:message];
 }
 - (void)connect:(id)sender {
     if (self.connecting || self.stream || self.transitioning || self.capturesStopping) return;
@@ -372,6 +392,7 @@
     NSUInteger generation = ++self.captureGeneration;
     self.choose.enabled = NO;
     self.message.stringValue = @"Connecting to Agent Display…";
+    [self.setup updatePreviewConnecting];
     [SCShareableContent getShareableContentExcludingDesktopWindows:YES onScreenWindowsOnly:YES completionHandler:^(SCShareableContent *content, NSError *error) {
         dispatch_async(dispatch_get_main_queue(), ^{
             if (generation != self.captureGeneration) return;
@@ -433,9 +454,11 @@
     [renderer enqueueSampleBuffer:sample];
     if (!self.preview.live) {
         self.preview.live=YES; self.message.hidden=YES; self.choose.hidden=YES;
+        self.setupHelp.hidden=YES;
         self.panel.title=@"Agent Display · Live";
         CVImageBufferRef image = CMSampleBufferGetImageBuffer(sample);
         self.panel.subtitle = [NSString stringWithFormat:@"%zu × %zu", CVPixelBufferGetWidth(image), CVPixelBufferGetHeight(image)];
+        [self.setup updatePreviewLive:YES message:[@"✓ Preview is live · " stringByAppendingString:self.panel.subtitle]];
     }
 }
 - (void)stream:(SCStream *)stream didStopWithError:(NSError *)error {

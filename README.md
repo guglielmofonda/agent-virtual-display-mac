@@ -48,9 +48,13 @@ cd agent-virtual-display-mac
 ./Start.command
 ```
 
-1. **Allow the preview.** Enable **Virtual Desktop** under **System Settings → Privacy & Security → Screen & System Audio Recording**. Reopen the app if requested.
-2. **Move an app.** Click the two-display menu bar icon → **Move App to Agent Display**. Enable **Accessibility** when prompted to allow window movement.
-3. **Watch it work.** The preview reads **Agent Display · Live** and shows the received resolution. Resize it to suit your workspace.
+The first launch opens a short setup guide:
+
+1. **Meet your workspace.** See how the second screen, floating preview, and menu bar controls fit together.
+2. **Enable permissions.** Use **Allow Preview** to open macOS’s Screen Recording setup. Enable **Virtual Desktop**. Accessibility is optional and enables moving apps from the menu. Setup remembers your progress if macOS asks you to quit and reopen.
+3. **Try the live preview.** Choose **Start Preview**, then optionally move an open app from the setup window. **Finish Setup** becomes available once a live frame arrives.
+
+You can choose **Set Up Later** and return from **Setup & Permissions…** in the menu bar. Existing installations keep their normal launch behavior; the guide is always available from that menu.
 
 The launcher builds the app locally. Next time, double-click **Start.command** or open **build/VirtualDesktop.app**. Finder and macOS permissions call the app **Virtual Desktop**.
 
@@ -67,6 +71,7 @@ Available from the **menu bar icon** and **Desktop Controls** in the preview’s
 | **Bring App to Main Display** | List apps with visible normal windows on Agent Display; bring their workspace windows back. |
 | **Stop / Start Virtual Desktop** | Disconnect or recreate the display. Stopping lets macOS relocate its windows to connected screens. |
 | **Restart / Quit Virtual Desktop** | Recreate the display, or quit the app and disconnect the display it owns. |
+| **Setup & Permissions…** | Reopen the setup guide, check permission status, or try moving your first app. |
 
 **Interact through the preview:** click a point to move the real pointer there, then click again to act. Move right across Agent Display’s edge to return to the adjacent physical screen.
 
