@@ -1,16 +1,46 @@
-# Agent Virtual Display Mac
+<p align="center">
+  <img src="assets/AppIcon.png" alt="Agent Display" width="112" />
+</p>
 
-Give your Mac agent a second screen and watch its work in a small floating window. The app creates a 1920 × 1080 extended display called **Codex Workspace** to the left of your existing screens. Your usual screen stays primary. Reopening the app brings the viewer back.
+<h1 align="center">Agent Display</h1>
 
-## Give this to your agent
+<p align="center">
+  <strong>Give your agent a screen of its own.</strong><br />
+  A native macOS menu bar app with a virtual display, a live preview,<br />
+  and one-click app movement between screens.
+</p>
 
-> Set up https://github.com/guglielmofonda/agent-virtual-display-mac on my Mac. Read AGENTS.md, open the live viewer, and move a dedicated browser window onto Codex Workspace. Keep my working window available and verify that the preview shows the browser.
+<p align="center">
+  <img src="https://img.shields.io/badge/macOS-15.2%2B-202124?style=flat-square" alt="macOS 15.2+" />
+  <img src="https://img.shields.io/badge/display-4K%20Retina-7659FF?style=flat-square" alt="4K Retina" />
+  <img src="https://img.shields.io/badge/preview-local%20only-202124?style=flat-square" alt="Local preview" />
+</p>
 
-For an agent that receives A2A messages, send the same task with the [A2A handoff](examples/README.md).
+<p align="center">
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#everyday-controls">Controls</a> ·
+  <a href="docs/SETUP.md">Setup & troubleshooting</a> ·
+  <a href="docs/DEVELOPMENT.md">Development</a>
+</p>
 
-## Run it yourself
+---
 
-Use a signed-in Mac desktop, macOS 15.2 or newer, and Apple Command Line Tools with the macOS 15.2+ SDK. Run `xcode-select --install` if the tools are missing.
+Move a browser, editor, or other app onto **Agent Display** and follow along in a floating window. Keep the preview small, enlarge it to inspect the work, or hide it while the virtual display stays connected.
+
+The display sits to the left of your existing screens. Your main screen stays primary.
+
+| | |
+| :--- | :--- |
+| **A sharp, live view** | 4K Retina rendering, native-resolution capture, and a resizable preview that stays above other apps and across Spaces. |
+| **Apps in, apps out** | Send a running app to Agent Display. The return menu shows only apps with visible windows there. |
+| **Control from the menu bar** | Show, hide, stop, restart, or quit. App lists refresh each time you open the menu. |
+| **Everything stays on your Mac** | Frames stay in memory. No audio capture, recording, network client, or analytics. |
+
+> **One Mac, one pointer.** Both screens share keyboard focus and the mouse. Agent Display provides an extended workspace, not an isolated computer or a separate login session.
+
+## Quick start
+
+Requires a signed-in Mac running **macOS 15.2+** and Apple Command Line Tools with a macOS 15.2+ SDK. If the tools are missing, run `xcode-select --install`.
 
 ```sh
 git clone https://github.com/guglielmofonda/agent-virtual-display-mac.git
@@ -18,18 +48,52 @@ cd agent-virtual-display-mac
 ./Start.command
 ```
 
-1. Click **Start preview**. On the first run, enable **AgentVirtualDisplayMac** or **Agent Virtual Display Mac** in **System Settings → Privacy & Security → Screen & System Audio Recording**. Reopen the app if macOS asks.
-2. Open a separate window in your browser. Exit full screen for that window, then use **Window → Move to Codex Workspace**. The floating viewer shows it once the title reads **Codex Workspace · Live**.
-3. Keep typing in your regular app. Drag or resize the preview to suit your desk. To interact, click a spot in the preview to move your pointer there, then click again to act. Move right across the virtual screen’s edge to return to the adjacent physical screen.
+1. **Allow the preview.** Enable **Virtual Desktop** under **System Settings → Privacy & Security → Screen & System Audio Recording**. Reopen the app if requested.
+2. **Move an app.** Click the two-display menu bar icon → **Move App to Agent Display**. Enable **Accessibility** when prompted to allow window movement.
+3. **Watch it work.** The preview reads **Agent Display · Live** and shows the received resolution. Resize it to suit your workspace.
 
-Double-click **Start.command** next time, or open **build/AgentVirtualDisplayMac.app** directly. Close the viewer to stop. A display created by this app disconnects when it quits. If an existing compatible display was reused, its original owner controls its lifetime.
+The launcher builds the app locally. Next time, double-click **Start.command** or open **build/VirtualDesktop.app**. Finder and macOS permissions call the app **Virtual Desktop**.
 
-## What the app can access
+**Rebuilding often?** [Configure stable signing](docs/SETUP.md#keep-permissions-across-updates) to preserve the app’s identity across updates. The launcher reuses your saved certificate.
 
-macOS grants app-wide screen capture permission. The viewer selects the workspace by display identity, displays its frames in memory, and disables audio. The app has no network client or recording feature. Rebuilding or moving it may trigger a new permission request.
+## Everyday controls
 
-Both displays share the Mac’s keyboard focus and pointer. Agents should use controls targeted to the dedicated tab or window when available. System-wide clicks, keyboard shortcuts, and dialogs can still interrupt the person working. This utility supplies the display and viewer. The receiving agent supplies its own Mac or browser controls.
+Available from the **menu bar icon** and **Desktop Controls** in the preview’s title bar.
 
-## Compatibility
+| Control | Behavior |
+| :--- | :--- |
+| **Show / Hide Preview** | Toggle the viewer. Hiding or closing it pauses capture and keeps the virtual display connected. |
+| **Move App to Agent Display** | List all running desktop apps; move the selected app’s windows from physical screens. |
+| **Bring App to Main Display** | List apps with visible normal windows on Agent Display; bring their workspace windows back. |
+| **Stop / Start Virtual Desktop** | Disconnect or recreate the display. Stopping lets macOS relocate its windows to connected screens. |
+| **Restart / Quit Virtual Desktop** | Recreate the display, or quit the app and disconnect the display it owns. |
 
-The original display and live viewer were exercised on an Apple silicon Mac running macOS 26.6.2. The standalone build targets macOS 15.2+. Creating the virtual screen uses the private CoreGraphics virtual display API, which Apple may change. Capturing it uses ScreenCaptureKit. A shell that cannot see the logged-in desktop can still build the app. Launch the built app from Finder in the actual desktop session.
+**Interact through the preview:** click a point to move the real pointer there, then click again to act. Move right across Agent Display’s edge to return to the adjacent physical screen.
+
+To move just one window, use that app’s **Window → Move to Agent Display** command when available. Exit full screen before moving. Hidden, minimized, and other-Space windows do not add apps to the return menu; apps with no movable windows show an explanatory message.
+
+## Retina, without tiny text
+
+Agent Display renders **3840 × 2160 pixels** in a **1920 × 1080-point workspace**. Text and windows keep their familiar size, with sharper edges. The preview captures at native resolution, up to **24 fps**.
+
+Upgrading from the old display? If the title bar still shows 1920 × 1080, [select the Retina default and reopen the preview](docs/SETUP.md#the-upgraded-preview-still-shows-1920--1080).
+
+## Hand it to your agent
+
+Paste this into an agent that can operate your Mac:
+
+> Set up https://github.com/guglielmofonda/agent-virtual-display-mac on my Mac. Read AGENTS.md, open the live viewer, and move a dedicated browser window onto Agent Display. Keep my working window available and verify that the preview shows the browser.
+
+The agent needs access to the Mac’s GUI. When you’re working at the same time, prefer automation targeted at a dedicated tab or window. For an existing Agent2Agent receiver, use the [A2A handoff example](examples/README.md).
+
+## Permissions and compatibility
+
+**Screen recording** permission lets the app display frames; the viewer selects only Agent Display, although macOS grants permission app-wide. **Accessibility** permission lets it inspect and move app windows.
+
+Built with Objective-C, AppKit, CoreGraphics, and ScreenCaptureKit, with no third-party runtime dependencies. Virtual display creation uses Apple’s private `CGVirtualDisplay` API, which may change with macOS updates. The live 4K preview has been verified on Apple silicon running macOS 26.6.2.
+
+| Need help? | Start here |
+| :--- | :--- |
+| Permissions, signing, blank preview, or display modes | [Setup & troubleshooting](docs/SETUP.md) |
+| Build commands, tests, and code structure | [Development](docs/DEVELOPMENT.md) |
+| Reproducible bug or feature request | [GitHub Issues](https://github.com/guglielmofonda/agent-virtual-display-mac/issues) |

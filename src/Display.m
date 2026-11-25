@@ -14,7 +14,8 @@ CGDirectDisplayID WorkspaceDisplayID(void) {
     uint32_t count = 0;
     if (CGGetActiveDisplayList(32, ids, &count) != kCGErrorSuccess) return 0;
     for (unsigned i = 0; i < count; i++) {
-        if (CGDisplayVendorNumber(ids[i]) == 17240 && CGDisplaySerialNumber(ids[i]) == 914225)
+        if (CGDisplayVendorNumber(ids[i]) == 17240 &&
+            (CGDisplaySerialNumber(ids[i]) == 914225 || CGDisplaySerialNumber(ids[i]) == 914226))
             return ids[i];
     }
     return 0;
@@ -37,38 +38,56 @@ id CreateWorkspaceDisplay(NSString **error) {
         *error = @"This macOS version lacks virtual display support."; return nil;
     }
     id desc = [NSClassFromString(@"CGVirtualDisplayDescriptor") new];
-    [desc setValue:@"Codex Workspace" forKey:@"name"];
-    [desc setValue:@1920 forKey:@"maxPixelsWide"];
-    [desc setValue:@1080 forKey:@"maxPixelsHigh"];
+    [desc setValue:@"Agent Display" forKey:@"name"];
+    [desc setValue:@3840 forKey:@"maxPixelsWide"];
+    [desc setValue:@2160 forKey:@"maxPixelsHigh"];
     [desc setValue:@17240 forKey:@"vendorID"];
     [desc setValue:@1314 forKey:@"productID"];
-    [desc setValue:@914225 forKey:@"serialNum"];
-    [desc setValue:@914225 forKey:@"serialNumber"];
-    [desc setQueue:dispatch_get_main_queue()];
+    [desc setValue:@914226 forKey:@"serialNum"];
+    [desc setValue:@914226 forKey:@"serialNumber"];
+    [desc setQueue:dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0)];
     [desc setSizeInMillimeters:CGSizeMake(480,270)];
     id display = [[NSClassFromString(@"CGVirtualDisplay") alloc] initWithDescriptor:desc];
     if (!display) { *error = @"macOS could not create the virtual display."; return nil; }
     id mode = [[NSClassFromString(@"CGVirtualDisplayMode") alloc] initWithWidth:1920 height:1080 refreshRate:60];
     id settings = [NSClassFromString(@"CGVirtualDisplaySettings") new];
+    // Keep a 1920 × 1080-point desktop, rendered at 2× for sharp Retina text.
+    [settings setValue:@YES forKey:@"hiDPI"];
     [settings setValue:@[mode] forKey:@"modes"];
     if (![display applySettings:settings]) { *error = @"macOS could not set the virtual display mode."; return nil; }
 
     CGDirectDisplayID target = [display displayID];
-    for (unsigned attempt = 0; attempt < 50 && !CGDisplayIsActive(target); attempt++)
-        CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.1, false);
-    if (WorkspaceDisplayID() != target || CGMainDisplayID() != main || CGDisplayIsInMirrorSet(target)) {
-        *error = @"macOS could not enable a separate secondary screen."; return nil;
+    for (unsigned attempt = 0; attempt < 100 && CGDisplayIsOnline(target) != 1; attempt++)
+        [NSThread sleepForTimeInterval:0.1];
+    if (CGDisplayIsOnline(target) != 1) {
+        *error = [NSString stringWithFormat:@"macOS created display %u but did not connect it.", target]; return nil;
     }
-    CGRect screen = CGDisplayBounds(target);
     CGDisplayConfigRef config = NULL;
     CGError result = CGBeginDisplayConfiguration(&config);
     if (result == kCGErrorSuccess) {
-        result = CGConfigureDisplayOrigin(config, target, CGRectGetMinX(left) - screen.size.width, CGRectGetMinY(left));
+        // Prefer the Retina mode even if macOS remembers this display at 1×.
+        CFArrayRef modes = CGDisplayCopyAllDisplayModes(target, NULL);
+        for (CFIndex i = 0; modes && i < CFArrayGetCount(modes); i++) {
+            CGDisplayModeRef candidate = (CGDisplayModeRef)CFArrayGetValueAtIndex(modes, i);
+            if (CGDisplayModeGetWidth(candidate) == 1920 && CGDisplayModeGetHeight(candidate) == 1080 &&
+                CGDisplayModeGetPixelWidth(candidate) == 3840 && CGDisplayModeGetPixelHeight(candidate) == 2160) {
+                result = CGConfigureDisplayWithDisplayMode(config, target, candidate, NULL);
+                break;
+            }
+        }
+        if (modes) CFRelease(modes);
+        if (result == kCGErrorSuccess)
+            result = CGConfigureDisplayOrigin(config, target, CGRectGetMinX(left) - 1920, CGRectGetMinY(left));
         if (result == kCGErrorSuccess) result = CGCompleteDisplayConfiguration(config, kCGConfigureForSession);
         else CGCancelDisplayConfiguration(config);
     }
     if (result != kCGErrorSuccess) {
-        *error = @"Could not place the virtual display to the left."; return nil;
+        *error = [NSString stringWithFormat:@"Could not position the virtual display (macOS error %d).", result]; return nil;
     }
-    return display;
+    for (unsigned attempt = 0; attempt < 50; attempt++) {
+        if (WorkspaceDisplayID() == target && CGMainDisplayID() == main && CGDisplayIsActive(target) == 1 && CGDisplayIsInMirrorSet(target) == 0) return display;
+        [NSThread sleepForTimeInterval:0.1];
+    }
+    *error = [NSString stringWithFormat:@"macOS could not enable the extended display (online %d, active %d, mirrored %d).", CGDisplayIsOnline(target), CGDisplayIsActive(target), CGDisplayIsInMirrorSet(target)];
+    return nil;
 }
