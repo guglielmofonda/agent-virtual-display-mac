@@ -5,6 +5,7 @@
 #import "Display.h"
 #import "WindowMover.h"
 #import "SetupWindowController.h"
+#import "AgentServer.h"
 
 @interface MonitorPanel : NSPanel
 @end
@@ -54,6 +55,8 @@
 @property (strong) NSButton *setupHelp;
 @property (strong) ADSetupState *setupState;
 @property (strong) ADSetupWindowController *setup;
+@property (strong) ADAgentServer *agentServer;
+@property (copy) NSString *agentServerError;
 @property (strong) SCStream *stream;
 @property (strong) NSStatusItem *statusItem;
 @property BOOL transitioning;
@@ -130,6 +133,14 @@
         [self startDesktop:nil];
         [self showPreview:nil];
     } else [self status:@"Virtual desktop is stopped."];
+    __weak typeof(self) weakSelf = self;
+    NSString *controlDirectory = [NSHomeDirectory() stringByAppendingPathComponent:@"Library/Application Support/AgentDisplay"];
+    self.agentServer = [[ADAgentServer alloc] initWithDirectory:controlDirectory handler:^(NSDictionary *request, ADAgentReply reply) {
+        [weakSelf handleAgentRequest:request reply:reply];
+    }];
+    NSError *controlError = nil;
+    if (![self.agentServer start:&controlError]) self.agentServerError = controlError.localizedDescription;
+    [self updateMenu];
 }
 - (BOOL)applicationShouldHandleReopen:(NSApplication *)sender hasVisibleWindows:(BOOL)visible {
     if (!self.setupState.completed) { [self.setup showSetup]; return YES; }
@@ -220,6 +231,10 @@
         [self addItem:@"Display is managed by another instance" action:NULL toMenu:menu enabled:NO];
     [menu addItem:NSMenuItem.separatorItem];
     [self addItem:@"Setup & Permissions…" action:@selector(openSetup:) toMenu:menu enabled:YES];
+    if (self.agentServerError) {
+        NSMenuItem *issue = [self addItem:@"Agent commands unavailable" action:NULL toMenu:menu enabled:NO];
+        issue.toolTip = self.agentServerError;
+    }
     [self addItem:@"Quit Virtual Desktop" action:@selector(quit:) toMenu:menu enabled:!self.transitioning];
     menu.itemArray.lastObject.keyEquivalent = @"q";
 }
@@ -364,6 +379,7 @@
 }
 - (void)quit:(id)sender { [NSApp terminate:nil]; }
 - (void)applicationWillTerminate:(NSNotification *)note {
+    [self.agentServer stop];
     self.captureGeneration++;
     [self.stream stopCaptureWithCompletionHandler:nil];
     self.stream = nil;
@@ -467,6 +483,65 @@
     }});
 }
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)sender {return NO;}
+
+- (NSDictionary *)agentStatus {
+    CGDirectDisplayID display = WorkspaceDisplayID();
+    CGRect bounds = display ? CGDisplayBounds(display) : CGRectZero;
+    return @{@"ok": @YES, @"protocol_version": @1,
+        @"app_version": [NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"unknown",
+        @"display_running": @(display != 0), @"display_id": @(display),
+        @"display_bounds": @{@"x": @(bounds.origin.x), @"y": @(bounds.origin.y), @"width": @(bounds.size.width), @"height": @(bounds.size.height)},
+        @"preview_live": @(self.preview.live), @"preview_visible": @(self.panel.visible),
+        @"preview_resolution": self.panel.subtitle ?: @"", @"message": self.preview.live ? @"Live" : self.message.stringValue,
+        @"busy": @(self.transitioning || self.connecting || self.capturesStopping),
+        @"setup_completed": @(self.setupState.completed),
+        @"permissions": @{@"screen_recording": @(CGPreflightScreenCaptureAccess()), @"accessibility": @(WindowMovementAllowed())}};
+}
+- (void)handleAgentRequest:(NSDictionary *)request reply:(ADAgentReply)reply {
+    NSString *command = request[@"command"];
+    if ([command isEqual:@"status"]) { reply([self agentStatus]); return; }
+    if ([command isEqual:@"apps"]) {
+        BOOL known = CGPreflightScreenCaptureAccess();
+        NSSet *onAgent = known ? [NSSet setWithArray:[ApplicationsOnWorkspace() valueForKey:@"processIdentifier"]] : [NSSet new];
+        NSMutableArray *apps = [NSMutableArray new];
+        for (NSRunningApplication *app in OpenApplications()) {
+            [apps addObject:@{@"name": app.localizedName ?: @"App", @"bundle_id": app.bundleIdentifier ?: @"",
+                @"pid": @(app.processIdentifier), @"on_agent_display": known ? @([onAgent containsObject:@(app.processIdentifier)]) : NSNull.null}];
+        }
+        reply(@{@"ok": @YES, @"apps": apps, @"display_inventory_available": @(known)}); return;
+    }
+    if ([command isEqual:@"setup"]) { [self.setup showPermissions]; reply(@{@"ok": @YES}); return; }
+    if ([command isEqual:@"hide"]) { [self hidePreview]; reply([self agentStatus]); return; }
+    if (!self.setupState.completed) {
+        reply(ADAgentError(@"setup_required", @"Complete the first-run guide in Agent Display. Run the setup command to open it.")); return;
+    }
+    if (self.transitioning) { reply(ADAgentError(@"busy", @"The display is updating. Check status before retrying.")); return; }
+    if ([command isEqual:@"start"] || [command isEqual:@"show"]) {
+        if (!CGPreflightScreenCaptureAccess()) { reply(ADAgentError(@"permission_required", @"Enable Screen Recording for Virtual Desktop in Setup & Permissions, then reopen the app if macOS requires it.")); return; }
+        if (!WorkspaceDisplayID()) [self startDesktop:nil];
+        else [self showPreview:nil];
+        reply([self agentStatus]); return;
+    }
+    if (!WorkspaceDisplayID()) { reply(ADAgentError(@"display_not_running", @"Start Agent Display before opening or moving an app.")); return; }
+    if (!WindowMovementAllowed()) { reply(ADAgentError(@"permission_required", @"Enable Accessibility for Virtual Desktop in Setup & Permissions to move windows.")); return; }
+    NSString *bundleID = request[@"app"];
+    if ([bundleID isEqual:NSBundle.mainBundle.bundleIdentifier]) { reply(ADAgentError(@"invalid_app", @"The Agent Display viewer must stay on your main screen.")); return; }
+    if ([command isEqual:@"open"]) {
+        NSURL *url = [NSWorkspace.sharedWorkspace URLForApplicationWithBundleIdentifier:bundleID];
+        if (!url) { reply(ADAgentError(@"app_not_found", @"No installed app matches that bundle identifier.")); return; }
+        NSWorkspaceOpenConfiguration *config = [NSWorkspaceOpenConfiguration configuration];
+        config.activates = [request[@"activate"] boolValue];
+        [NSWorkspace.sharedWorkspace openApplicationAtURL:url configuration:config completionHandler:^(NSRunningApplication *app, NSError *error) {
+            if (error || !app) reply(ADAgentError(@"launch_failed", error.localizedDescription ?: @"The app did not launch."));
+            else reply(@{@"ok": @YES, @"opened": @YES, @"app": app.bundleIdentifier ?: bundleID, @"pid": @(app.processIdentifier)});
+        }];
+        return;
+    }
+    NSArray *running = [NSRunningApplication runningApplicationsWithBundleIdentifier:bundleID];
+    if (!running.count) { reply(ADAgentError(@"not_running", @"That app is not running. Use open to launch it first.")); return; }
+    if (running.count != 1) { reply(ADAgentError(@"multiple_instances", @"Several instances of this app are running. Use the app’s own Window menu to move the intended window.")); return; }
+    reply(MoveApplicationForAgent(running.firstObject, ![request[@"destination"] isEqual:@"main"], [request[@"activate"] boolValue]));
+}
 @end
 int main(void) {
     @autoreleasepool {

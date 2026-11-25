@@ -1,6 +1,6 @@
 # Hand the task to another agent
 
-For chat-based agents, paste the prompt from the main README. For an existing Agent2Agent (A2A) 1.0 receiver, use the example request below. The receiving agent needs access to its user’s logged-in Mac. The desktop app itself stays local.
+For local agents, install the [portable Agent Display skill](../docs/AGENT-SKILL.md) and ask it to open or move the desired app. For an existing Agent2Agent (A2A) 1.0 receiver, use the example request below. The receiving agent needs access to its user’s logged-in Mac. The desktop app itself stays local.
 
 The fixture uses the A2A 1.0 **HTTP+JSON** binding. Get the receiver’s HTTP+JSON base URL from its Agent Card, supply the authentication that receiver requires, and send a fresh message ID on each new task. From the repository root, for a receiver that accepts requests from your shell:
 

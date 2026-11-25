@@ -85,11 +85,21 @@ Upgrading from the old display? If the title bar still shows 1920 × 1080, [sele
 
 ## Hand it to your agent
 
-Paste this into an agent that can operate your Mac:
+Install the portable **Agent Display** skill for local Codex and Claude Code sessions:
 
-> Set up https://github.com/guglielmofonda/agent-virtual-display-mac on my Mac. Read AGENTS.md, open the live viewer, and move a dedicated browser window onto Agent Display. Keep my working window available and verify that the preview shows the browser.
+```sh
+python3 tools/install-skill.py --agent both
+```
 
-The agent needs access to the Mac’s GUI. When you’re working at the same time, prefer automation targeted at a dedicated tab or window. For an existing Agent2Agent receiver, use the [A2A handoff example](examples/README.md).
+Then ask: **“Use the Agent Display skill to open Safari on the agent monitor.”** It can also move running apps there, bring them back, list what is on the display, and show or hide the preview.
+
+The skill bundles a standard-library Python client that talks to the signed app locally. The app performs window movement using its existing permission. Commands return JSON results and avoid explicitly taking focus unless requested. Requires **Agent Display 0.5.0+**, Python 3.9+, and a local Mac session that can access the app’s private socket.
+
+[Install for your agent and see examples →](docs/AGENT-SKILL.md)
+
+Other agents can install the same [Agent Skills folder](skills/agent-display), or read its instructions and use the helper directly. A cloud-only agent cannot control the Mac through this skill. App-wide moves affect all eligible source windows; for a dedicated browser window, the skill directs the agent to use the browser’s own window tools.
+
+For an existing Agent2Agent receiver, use the [A2A handoff example](examples/README.md).
 
 ## Permissions and compatibility
 
@@ -101,4 +111,5 @@ Built with Objective-C, AppKit, CoreGraphics, and ScreenCaptureKit, with no thir
 | :--- | :--- |
 | Permissions, signing, blank preview, or display modes | [Setup & troubleshooting](docs/SETUP.md) |
 | Build commands, tests, and code structure | [Development](docs/DEVELOPMENT.md) |
+| Codex, Claude Code, and portable agent commands | [Agent skill setup](docs/AGENT-SKILL.md) |
 | Reproducible bug or feature request | [GitHub Issues](https://github.com/guglielmofonda/agent-virtual-display-mac/issues) |

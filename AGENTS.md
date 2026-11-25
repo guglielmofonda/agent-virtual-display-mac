@@ -1,5 +1,7 @@
 # Set up a visible workspace for Mac computer use
 
+For requests to open/move apps or operate an existing display, read [the portable Agent Display skill](skills/agent-display/SKILL.md). Prefer its local command helper to menu clicking for app-wide operations. Reuse an installed signed app; build or update it only when installation/development is part of the task. The guide below also covers first installation and single-window GUI workflows. Agent control requires version 0.5.0+, the app’s existing macOS permissions, and access to its private local socket.
+
 Package a proper app icon in every build so Finder and System Settings show it; a menu bar symbol alone is not sufficient. Preserve `assets/AppIcon.png` and the Makefile’s icon packaging when rebuilding this app.
 
 For updates, preserve the bundle identifier and reuse the configured `CODE_SIGN_IDENTITY` in `Signing.local.mk`. Do not replace a certificate-signed installation with an ad-hoc build: it invalidates the user’s privacy grants. If no signing identity is configured, explain the limitation before repeatedly rebuilding and refreshing permissions.
@@ -16,6 +18,8 @@ Use this procedure on the receiving user’s signed-in Mac. A cloud-only agent c
 After Accessibility permission is granted, the menu can move an app’s windows from physical displays to Agent Display or bring its Agent Display windows back to the main display. If the display is managed by another instance, stop its original launcher first. The legacy Terminal launcher exits with Control-C. Then start the display from this app’s menu to enable Stop and Restart.
 
 The Move App to Agent Display menu lists all running regular desktop apps. The Bring App to Main Display menu lists only apps with visible normal windows on Agent Display; hidden/minimized windows and windows on other Spaces must not populate it. Refresh these lists whenever the menu opens. Run `make test` when changing the window inventory/filtering.
+
+When changing the agent interface or bundled skill, run `make test-agent-unit`; run `make test-agent` in a Mac session that permits local socket binding. Never report the socket integration or real window movement as verified if the sandbox prevented it. Keep one canonical skill under `skills/agent-display/`; the installer copies that same bundle to each agent’s discovery directory.
 
 Agent Display uses a 1920 × 1080-point HiDPI mode with 3840 × 2160 backing pixels. Preserve logical coordinates for window movement and pointer mapping. Capture at `SCContentFilter.contentRect` multiplied by `pointPixelScale`; do not downsample the preview to a fixed 720p size. The preview subtitle reports the actual received frame dimensions.
 

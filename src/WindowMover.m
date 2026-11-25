@@ -103,8 +103,11 @@ static BOOL WindowBounds(AXUIElementRef window, CGRect *bounds) {
            AXValueGetValue((__bridge AXValueRef)size, kAXValueCGSizeType, &bounds->size);
 }
 
-static NSString *MoveApplication(NSRunningApplication *application, BOOL toWorkspace) {
+static NSString *MoveApplication(NSRunningApplication *application, BOOL toWorkspace, BOOL activate,
+                                 BOOL idempotent, NSString **code, NSUInteger *movedCount) {
+    *code = @"permission_required";
     if (!WindowMovementAllowed()) return @"Enable Accessibility for Virtual Desktop in System Settings, then try moving the app again.";
+    *code = @"not_running";
     if (application.terminated) return @"That app has quit. Open the menu again to refresh the app list.";
     CGDirectDisplayID workspace = WorkspaceDisplayID();
     NSScreen *destination = toWorkspace ? nil : MainPhysicalScreen();
@@ -116,6 +119,7 @@ static NSString *MoveApplication(NSRunningApplication *application, BOOL toWorks
             }
         }
     }
+    *code = @"display_not_running";
     if (!workspace || !destination) return @"Both Agent Display and a physical display must be connected.";
 
     // AppKit is bottom-left based. AX and CG use top-left coordinates, including negative display origins.
@@ -130,13 +134,21 @@ static NSString *MoveApplication(NSRunningApplication *application, BOOL toWorks
     id windowList = Attribute(appElement, kAXWindowsAttribute);
     if (![windowList isKindOfClass:NSArray.class]) {
         CFRelease(appElement);
+        *code = @"windows_unavailable";
         return @"macOS could not read this app’s windows. Check Accessibility permission and try again.";
     }
     NSUInteger moved = 0, failed = 0, fullscreen = 0;
+    BOOL alreadyThere = NO;
     for (id item in windowList) {
         AXUIElementRef window = (__bridge AXUIElementRef)item;
         CGRect bounds;
-        if (!WindowBounds(window, &bounds) || !WindowMatchesSource(bounds, workspace, toWorkspace)) continue;
+        if (!WindowBounds(window, &bounds)) continue;
+        if (WindowIsOnDisplay(bounds, destinationID)) {
+            if (idempotent && [Attribute(window, kAXMinimizedAttribute) boolValue])
+                AXUIElementSetAttributeValue(window, kAXMinimizedAttribute, kCFBooleanFalse);
+            alreadyThere |= ![Attribute(window, kAXMinimizedAttribute) boolValue];
+        }
+        if (!WindowMatchesSource(bounds, workspace, toWorkspace)) continue;
         if ([Attribute(window, CFSTR("AXFullScreen")) boolValue]) { fullscreen++; continue; }
         if ([Attribute(window, kAXMinimizedAttribute) boolValue])
             AXUIElementSetAttributeValue(window, kAXMinimizedAttribute, kCFBooleanFalse);
@@ -159,28 +171,43 @@ static NSString *MoveApplication(NSRunningApplication *application, BOOL toWorks
         CGRect actual;
         if (result == kAXErrorSuccess && WindowBounds(window, &actual) &&
             fabs(actual.origin.x - point.x) < 4 && fabs(actual.origin.y - point.y) < 4) {
-            AXUIElementPerformAction(window, kAXRaiseAction);
+            if (activate) AXUIElementPerformAction(window, kAXRaiseAction);
             moved++;
         } else failed++;
     }
     CFRelease(appElement);
-    if (moved) [application activateWithOptions:0];
+    *movedCount = moved;
+    if (moved && activate) [application activateWithOptions:0];
     if (fullscreen || failed) {
+        *code = failed ? @"move_failed" : @"fullscreen";
         NSMutableArray *messages = [NSMutableArray array];
         if (moved) [messages addObject:[NSString stringWithFormat:@"Moved %lu window(s).", (unsigned long)moved]];
         if (fullscreen) [messages addObject:@"Exit full screen for the remaining window(s), then try again."];
         if (failed) [messages addObject:@"The app did not move one or more windows. Try its Window → Move to Display command."];
         return [messages componentsJoinedByString:@" "];
     }
-    if (moved) return nil;
+    if (moved || (idempotent && alreadyThere)) return nil;
+    *code = @"no_windows";
     return toWorkspace ? @"This app has no movable windows on your physical displays. Open the menu to refresh the list." :
                          @"This app has no movable windows on Agent Display. Open the menu to refresh the list.";
 }
 
 NSString *MoveApplicationToMainDisplay(NSRunningApplication *application) {
-    return MoveApplication(application, NO);
+    NSString *code; NSUInteger moved = 0;
+    return MoveApplication(application, NO, YES, NO, &code, &moved);
 }
 
 NSString *MoveApplicationToWorkspace(NSRunningApplication *application) {
-    return MoveApplication(application, YES);
+    NSString *code; NSUInteger moved = 0;
+    return MoveApplication(application, YES, YES, NO, &code, &moved);
+}
+
+NSDictionary *MoveApplicationForAgent(NSRunningApplication *application, BOOL toWorkspace, BOOL activate) {
+    if (WindowMovementAllowed() && WorkspaceDisplayID() && application.hidden) [application unhide];
+    NSString *code; NSUInteger moved = 0;
+    NSString *error = MoveApplication(application, toWorkspace, activate, YES, &code, &moved);
+    NSMutableDictionary *result = [@{@"ok": @(error == nil), @"moved_windows": @(moved),
+        @"app": application.bundleIdentifier ?: @"", @"destination": toWorkspace ? @"agent" : @"main"} mutableCopy];
+    if (error) result[@"error"] = @{@"code": code, @"message": error};
+    return result;
 }

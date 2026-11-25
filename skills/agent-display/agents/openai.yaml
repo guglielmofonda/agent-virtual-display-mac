@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agent Display"
+  short_description: "Open and move Mac apps onto a virtual display"
+  default_prompt: "Use $agent-display to open an app on Agent Display and verify the live preview."

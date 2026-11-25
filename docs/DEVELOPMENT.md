@@ -10,6 +10,8 @@ The project builds directly with Apple’s compiler tools; no package manager is
 make build
 make test
 make test-ui
+make test-agent-unit
+make test-agent
 ```
 
 `make build` packages `build/VirtualDesktop.app`, includes the app icon, signs it with the identity in `Signing.local.mk` when configured, and verifies the signature. Without a configured identity it uses ad-hoc signing. Quit a running installation before rebuilding it.
@@ -38,12 +40,16 @@ Keep custom `APP` and `BIN` paths relative and free of spaces. The repository’
 | `src/Viewer.m` | Menu bar controls, floating AppKit preview, ScreenCaptureKit capture, and display lifecycle. |
 | `src/SetupWindowController.m` | Native first-run setup, permission checks, preview verification, and an optional first-app picker. |
 | `src/SetupState.m` | Saved setup progress, completion, and migration of existing installations. |
+| `src/AgentServer.m` | Bounded JSON command transport over a private, same-user Unix socket. Handlers run through the app on its main queue. |
 | `src/WindowMover.m` | Running-app inventory, visible-window filtering, and Accessibility-based window movement. |
 | `tests/WindowMoverTests.m` | App and window inventory checks that run without GUI privacy grants. |
 | `tests/SetupStateTests.m` / `tests/SetupUITests.m` | Setup persistence and migration; permission/preview gates and light/dark layout checks. |
 | `Start.command` | Build/open entry point and staged certificate-signing setup. |
 | `assets/AppIcon.png` / `AppIcon.icns` | App artwork and the packaged macOS icon. |
 | `AGENTS.md` | Instructions for agents operating or updating the app. |
+| `skills/agent-display/` | Portable Agent Skill, Python client, and command reference. |
+| `tools/install-skill.py` | Install the same skill for Codex, Claude Code, or another local client. |
+| `tests/AgentServerFixture.m` / `tests/test_agent_skill.py` | Native protocol validation, isolated socket fixture, client orchestration, and installer checks. |
 
 ## Display and capture
 
@@ -69,3 +75,13 @@ GUI behavior requires a signed-in Mac and the relevant privacy grants. Before re
 6. A fresh installation shows Welcome before creating a display or requesting capture. Screen permission is requested only from its button, returning from Settings refreshes status, and a quit/reopen resumes setup. Accessibility can be skipped. Verify a real live frame before finishing, then confirm setup stays dismissed on subsequent launches.
 
 The 4K implementation has passed a local build and the inventory tests. A live **3840 × 2160** preview was verified on Apple silicon running macOS 26.6.2. An upgraded installation retained macOS’s old low-resolution mode until the Retina default was selected in Displays and the preview reopened; see the [recovery steps](SETUP.md#the-upgraded-preview-still-shows-1920--1080).
+
+## Agent commands
+
+The Python client uses newline-delimited JSON with `version: 1`. Requests are limited to 4096 bytes, the server accepts at most four simultaneous clients, reads are bounded, and replies have a 30-second handler deadline. An advisory lock prevents a second app instance from replacing an active socket. The server rejects unexpected paths/permissions, symlink endpoints, peers from other users, unknown commands/arguments, and invalid app identifiers.
+
+The app owns all Accessibility operations. Agent moves share the menu’s movement implementation but do not explicitly activate or raise the target unless requested, and return verified move counts. Starting a display and launching an app are asynchronous; the helper polls for a live frame or a newly exposed window. It retries only confirmed `no_windows` responses, never partial moves or ambiguous timeouts.
+
+`make test-agent-unit` works without a listening socket. `make test-agent` additionally exchanges requests with a native fixture, which never controls real windows. Both are required for full transport validation on a normal Mac Terminal. A restricted agent sandbox may deny socket binding with `Operation not permitted`; report that integration check as blocked, not passed. The initial 0.5.0 implementation passed build, inventory, onboarding, client, and installer checks in such a sandbox; live socket and signed GUI verification remain to be run on the Mac.
+
+After installing the signed build, use the [agent command examples](AGENT-SKILL.md#try-the-commands-directly) with a harmless test app. Confirm the window in the preview and return it to the main display. Keep the original primary display and the configured signing identity.
